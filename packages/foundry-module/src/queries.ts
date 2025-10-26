@@ -83,6 +83,10 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.cancel-map-job`] = this.handleCancelMapJob.bind(this);
     CONFIG.queries[`${modulePrefix}.upload-generated-map`] = this.handleUploadGeneratedMap.bind(this);
 
+    // Chat message queries
+    CONFIG.queries[`${modulePrefix}.send-chat-message`] = this.handleSendChatMessage.bind(this);
+    CONFIG.queries[`${modulePrefix}.get-chat-history`] = this.handleGetChatHistory.bind(this);
+
   }
 
   /**
@@ -1067,6 +1071,62 @@ export class QueryHandlers {
         error: error.message || 'Failed to upload generated map',
         success: false
       };
+    }
+  }
+
+  /**
+   * Handle sending a chat message request
+   */
+  async handleSendChatMessage(data: {
+    message: string;
+    speaker?: {
+      type: 'gm' | 'character' | 'npc';
+      characterName?: string;
+      characterId?: string;
+    };
+    isPrivate?: boolean;
+    whisperTo?: string[];
+    flavor?: string;
+  }): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      this.dataAccess.validateFoundryState();
+
+      if (!data.message) {
+        throw new Error('message is required');
+      }
+
+      return await this.dataAccess.sendChatMessage(data);
+    } catch (error) {
+      throw new Error(`Failed to send chat message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Handle get chat history request
+   */
+  async handleGetChatHistory(data: {
+    limit?: number;
+    includeWhispers?: boolean;
+    since?: string;
+  }): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      this.dataAccess.validateFoundryState();
+
+      return await this.dataAccess.getChatHistory(data);
+    } catch (error) {
+      throw new Error(`Failed to get chat history: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

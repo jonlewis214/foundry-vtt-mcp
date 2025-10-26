@@ -4176,4 +4176,219 @@ export class FoundryDataAccess {
     }
   }
 
+  /**
+   * Send a chat message to Foundry
+   */
+  async sendChatMessage(data: {
+    message: string;
+    speaker?: {
+      type: 'gm' | 'character' | 'npc';
+      characterName?: string;
+      characterId?: string;
+    };
+    isPrivate?: boolean;
+    whisperTo?: string[];
+    flavor?: string;
+  }): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    this.validateFoundryState();
+
+    try {
+      // Resolve speaker
+      let speaker: any = ChatMessage.getSpeaker();
+
+      if (data.speaker && data.speaker.type !== 'gm') {
+        const speakerForLookup: { type: 'character' | 'npc'; characterName?: string; characterId?: string } = {
+          type: data.speaker.type as 'character' | 'npc',
+          ...(data.speaker.characterName ? { characterName: data.speaker.characterName } : {}),
+          ...(data.speaker.characterId ? { characterId: data.speaker.characterId } : {})
+        };
+        const actor = await this.findActorForSpeaker(speakerForLookup);
+        if (actor) {
+          speaker = ChatMessage.getSpeaker({ actor });
+        } else {
+          // If actor not found, return error
+          const searchTerm = data.speaker.characterName || data.speaker.characterId || 'unknown';
+          return {
+            success: false,
+            error: `Could not find ${data.speaker.type} with identifier: ${searchTerm}. Make sure the character/NPC exists in the world and the name is spelled correctly.`
+          };
+        }
+      }
+
+      // Build whisper targets
+      const whisperTargets: string[] = [];
+
+      if (data.isPrivate) {
+        // Private to GM only
+        const gm = game.users?.find(u => u.isGM && u.active);
+        if (gm?.id) whisperTargets.push(gm.id);
+      } else if (data.whisperTo && data.whisperTo.length > 0) {
+        // Whisper to specific players
+        for (const playerName of data.whisperTo) {
+          const player = game.users?.find(u =>
+            u.name?.toLowerCase() === playerName.toLowerCase()
+          );
+          if (player?.id) {
+            whisperTargets.push(player.id);
+          } else {
+            console.warn(`[${MODULE_ID}] Could not find player: ${playerName}`);
+          }
+        }
+
+        // If no players were found, return error
+        if (whisperTargets.length === 0) {
+          return {
+            success: false,
+            error: `Could not find any of the specified players: ${data.whisperTo.join(', ')}. Make sure players are online and names are spelled correctly.`
+          };
+        }
+      }
+
+      // Create message
+      const messageData: any = {
+        speaker,
+        content: data.message,
+        style: (CONST as any).CHAT_MESSAGE_STYLES?.OTHER || 0,
+        ...(data.flavor ? { flavor: data.flavor } : {}),
+        ...(whisperTargets.length > 0 ? { whisper: whisperTargets } : {})
+      };
+
+      const chatMessage = await ChatMessage.create(messageData);
+
+      if (!chatMessage) {
+        return {
+          success: false,
+          error: 'Failed to create chat message'
+        };
+      }
+
+      return {
+        success: true,
+        messageId: chatMessage.id,
+      };
+    } catch (error) {
+      console.error(`[${MODULE_ID}] Failed to send chat message:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Get chat history
+   */
+  async getChatHistory(data: {
+    limit?: number;
+    includeWhispers?: boolean;
+    since?: string;
+  }): Promise<{ success: boolean; messages?: any[]; error?: string }> {
+    this.validateFoundryState();
+
+    try {
+      const limit = data.limit || 20;
+      const includeWhispers = data.includeWhispers !== false;
+      const sinceDate = data.since ? new Date(data.since) : null;
+
+      let messages = game.messages?.contents || [];
+
+      // Filter by timestamp if provided
+      if (sinceDate) {
+        messages = messages.filter((msg: any) =>
+          msg.timestamp && new Date(msg.timestamp) > sinceDate
+        );
+      }
+
+      // Filter whispers if needed
+      if (!includeWhispers) {
+        messages = messages.filter((msg: any) => !msg.whisper || msg.whisper.length === 0);
+      }
+
+      // Sort by timestamp (newest first) and limit
+      messages = messages
+        .sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))
+        .slice(0, limit);
+
+      // Format for Claude
+      const formattedMessages = messages.map((msg: any) => ({
+        id: msg.id,
+        speaker: msg.speaker?.alias || msg.speaker?.actor || 'Unknown',
+        content: msg.content,
+        timestamp: new Date(msg.timestamp || 0).toISOString(),
+        isWhisper: (msg.whisper && msg.whisper.length > 0) || false,
+        flavor: msg.flavor || undefined
+      }));
+
+      return {
+        success: true,
+        messages: formattedMessages
+      };
+    } catch (error) {
+      console.error(`[${MODULE_ID}] Failed to get chat history:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Find actor for speaker configuration
+   */
+  private async findActorForSpeaker(speaker: {
+    type: 'character' | 'npc';
+    characterName?: string;
+    characterId?: string;
+  }): Promise<any> {
+    if (speaker.characterId) {
+      return game.actors?.get(speaker.characterId);
+    }
+
+    if (speaker.characterName) {
+      return game.actors?.find((a: any) =>
+        a.name?.toLowerCase() === speaker.characterName!.toLowerCase()
+      );
+    }
+
+    return null;
+  }
+
+  /**
+   * Setup chat event bridge for real-time notifications
+   */
+  setupChatEventBridge(socketBridge: any): void {
+    if (!game.user?.isGM) {
+      // Only GM users emit chat events (security)
+      return;
+    }
+
+    Hooks.on('createChatMessage', (message: any) => {
+      try {
+        // Only emit for GM users (security)
+        if (!game.user?.isGM) return;
+
+        // Check if socket bridge is connected
+        if (!socketBridge || !socketBridge.isConnected()) return;
+
+        // Extract relevant message data
+        const messageData = {
+          id: message.id,
+          speaker: message.speaker?.alias || message.speaker?.actor || 'Unknown',
+          content: message.content,
+          timestamp: message.timestamp || Date.now(),
+          isWhisper: (message.whisper && message.whisper.length > 0) || false,
+          flavor: message.flavor || undefined
+        };
+
+        // Emit to MCP server via socket bridge
+        socketBridge.emitToServer('foundry-event', {
+          type: 'chat-message-created',
+          data: messageData
+        });
+      } catch (error) {
+        console.error(`[${MODULE_ID}] Error emitting chat event:`, error);
+      }
+    });
+  }
+
 }

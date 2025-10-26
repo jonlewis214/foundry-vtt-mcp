@@ -32,6 +32,8 @@ import { OwnershipTools } from './tools/ownership.js';
 
 import { MapGenerationTools } from './tools/map-generation.js';
 
+import { ChatTools } from './tools/chat.js';
+
 const CONTROL_HOST = '127.0.0.1';
 
 const CONTROL_PORT = 31414;
@@ -1055,6 +1057,8 @@ async function startBackend(): Promise<void> {
 
   const ownershipTools = new OwnershipTools({ foundryClient, logger });
 
+  const chatTools = new ChatTools({ foundryClient, logger });
+
   // Initialize mapgen-style backend components for map generation
   let mapGenerationJobQueue: any = null;
   let mapGenerationComfyUIClient: any = null;
@@ -1283,6 +1287,8 @@ async function startBackend(): Promise<void> {
     ...ownershipTools.getToolDefinitions(),
 
     ...mapGenerationTools.getToolDefinitions(),
+
+    ...chatTools.getToolDefinitions(),
 
   ];
 
@@ -1535,6 +1541,20 @@ async function startBackend(): Promise<void> {
                 case 'switch-scene':
 
                   result = await mapGenerationTools.switchScene(args);
+
+                  break;
+
+                // Chat tools
+
+                case 'send-chat-message':
+
+                  result = await chatTools.handleSendChatMessage(args);
+
+                  break;
+
+                case 'get-chat-history':
+
+                  result = await chatTools.handleGetChatHistory(args);
 
                   break;
 
