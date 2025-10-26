@@ -101,7 +101,11 @@
       "Bash(/Users/Adam/Projects/foundry-vtt-mcp/update-wrapper.sh:*)",
       "Bash(/Applications/FoundryMCPServer.app/Contents/Resources/ComfyUI/venv/bin/python /Applications/FoundryMCPServer.app/Contents/Resources/ComfyUI/main.py --help)",
       "Bash(./update-backend-now.sh:*)",
-      "Bash(hdiutil detach:*)"
+      "Bash(hdiutil detach:*)",
+      "WebFetch(domain:spec.modelcontextprotocol.io)",
+      "WebSearch",
+      "Bash(wc -l \"C:\\repos\\foundry-vtt-mcp(fork)\\packages\\foundry-module\\src\\data-access.ts\")",
+      "Bash(wc -l \"C:\\repos\\foundry-vtt-mcp(fork)\\packages\\foundry-module\\src\\queries.ts\")"
     ],
     "deny": [],
     "ask": [],

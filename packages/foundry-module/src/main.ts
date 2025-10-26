@@ -87,9 +87,14 @@ class FoundryMCPBridge {
 
       // Auto-connect when enabled (always automatic)
       const enabled = this.settings.getSetting('enabled');
-      
+
       if (enabled) {
         await this.start();
+      }
+
+      // Setup chat event bridge for real-time notifications
+      if (enabled && this.queryHandlers && this.queryHandlers.dataAccess && this.socketBridge) {
+        this.queryHandlers.dataAccess.setupChatEventBridge(this.socketBridge);
       }
 
       // Auto-build enhanced creature index if enabled and not exists
