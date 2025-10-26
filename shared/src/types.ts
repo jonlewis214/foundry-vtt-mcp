@@ -248,3 +248,66 @@ export interface CampaignTemplate {
   }>;
   metadata: Partial<CampaignMetadata>;
 }
+
+/**
+ * Chat message types
+ */
+export interface ChatSpeaker {
+  scene?: string;
+  actor?: string;
+  token?: string;
+  alias?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  content: string;
+  speaker: ChatSpeaker;
+  timestamp: number;
+  whisper: string[];
+  blind: boolean;
+  flavor?: string;
+  user: string;
+  type: number;
+  sound?: string;
+  flags?: Record<string, unknown>;
+}
+
+export interface ChatMessageSummary {
+  id: string;
+  speaker: string;
+  content: string;
+  timestamp: string;
+  isWhisper: boolean;
+  flavor?: string;
+}
+
+export interface SendChatMessageRequest {
+  message: string;
+  speaker?: {
+    type: 'gm' | 'character' | 'npc';
+    characterName?: string;
+    characterId?: string;
+  };
+  isPrivate?: boolean;
+  whisperTo?: string[];
+  flavor?: string;
+}
+
+export interface GetChatHistoryRequest {
+  limit?: number;
+  includeWhispers?: boolean;
+  since?: string;
+}
+
+export interface GetChatHistoryResponse {
+  success: boolean;
+  messages?: ChatMessageSummary[];
+  error?: string;
+}
+
+export interface SendChatMessageResponse {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}
