@@ -4365,10 +4365,14 @@ export class FoundryDataAccess {
     Hooks.on('createChatMessage', (message: any) => {
       try {
         // Only emit for GM users (security)
-        if (!game.user?.isGM) return;
+        if (!game.user?.isGM) {
+          return;
+        }
 
         // Check if socket bridge is connected
-        if (!socketBridge || !socketBridge.isConnected()) return;
+        if (!socketBridge || !socketBridge.isConnected()) {
+          return;
+        }
 
         // Extract relevant message data
         const messageData = {

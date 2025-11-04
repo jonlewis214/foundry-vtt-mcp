@@ -1292,6 +1292,39 @@ async function startBackend(): Promise<void> {
 
   ];
 
+  // Define MCP resources
+  const allResources = [
+    {
+      uri: 'foundry://chat/stream',
+      name: 'Chat Message Stream',
+      description: 'Real-time stream of Foundry VTT chat messages. Subscribe to receive chat events as they happen. Returns newline-delimited JSON.',
+      mimeType: 'application/x-ndjson'
+    }
+  ];
+
+  // Chat message queue for real-time streaming
+  const chatMessageQueue: any[] = [];
+  const MAX_CHAT_HISTORY = 100;
+
+  // Subscribe to Foundry events for real-time chat monitoring
+  foundryClient.on('foundry-event', (eventData: any) => {
+    if (eventData.type === 'chat-message-created') {
+      // Add to queue
+      chatMessageQueue.push(eventData.data);
+
+      // Keep only recent messages (prevent memory bloat)
+      if (chatMessageQueue.length > MAX_CHAT_HISTORY) {
+        chatMessageQueue.shift();
+      }
+
+      logger.debug('Chat message queued', {
+        speaker: eventData.data.speaker,
+        contentLength: eventData.data.content?.length,
+        queueSize: chatMessageQueue.length
+      });
+    }
+  });
+
   // Start Foundry connector (owns app port 31415)
 
   foundryClient.connect().catch((e) => {
@@ -1361,6 +1394,61 @@ async function startBackend(): Promise<void> {
           if (msg.method === 'list_tools') {
 
             socket.write(JSON.stringify({ id: msg.id, result: { tools: allTools } }) + '\n');
+
+            continue;
+
+          }
+
+          if (msg.method === 'list_resources') {
+
+            socket.write(JSON.stringify({ id: msg.id, result: { resources: allResources } }) + '\n');
+
+            continue;
+
+          }
+
+          if (msg.method === 'read_resource') {
+
+            const { uri } = (msg.params || {}) as { uri: string };
+
+            if (uri === 'foundry://chat/stream') {
+              if (!foundryClient.isReady()) {
+                socket.write(JSON.stringify({
+                  id: msg.id,
+                  result: {
+                    contents: [{
+                      uri: uri,
+                      mimeType: 'application/json',
+                      text: JSON.stringify({
+                        error: 'Foundry VTT not connected',
+                        messages: []
+                      })
+                    }]
+                  }
+                }) + '\n');
+              } else {
+                // Return all queued messages as newline-delimited JSON
+                const chatStream = chatMessageQueue
+                  .map(msg => JSON.stringify(msg))
+                  .join('\n');
+
+                socket.write(JSON.stringify({
+                  id: msg.id,
+                  result: {
+                    contents: [{
+                      uri: uri,
+                      mimeType: 'application/x-ndjson',
+                      text: chatStream || '[]'
+                    }]
+                  }
+                }) + '\n');
+              }
+            } else {
+              socket.write(JSON.stringify({
+                id: msg.id,
+                error: { message: `Unknown resource URI: ${uri}` }
+              }) + '\n');
+            }
 
             continue;
 

@@ -1,3 +1,4 @@
+import { EventEmitter } from 'events';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import { Logger } from './logger.js';
@@ -15,7 +16,7 @@ interface PendingQuery {
   timeout: NodeJS.Timeout;
 }
 
-export class FoundryConnector {
+export class FoundryConnector extends EventEmitter {
   private wss: WebSocketServer | null = null;
   private httpServer: any;
   private webrtcSignalingServer: any; // Separate HTTP server for WebRTC signaling
@@ -29,6 +30,7 @@ export class FoundryConnector {
   private queryIdCounter = 0;
 
   constructor({ config, logger }: FoundryConnectorOptions) {
+    super(); // Initialize EventEmitter
     this.config = config;
     this.logger = logger.child({ component: 'FoundryConnector' });
   }
@@ -233,6 +235,13 @@ export class FoundryConnector {
         this.pendingQueries.delete(message.id);
         pending.resolve(message.data);
       }
+      return;
+    }
+
+    // Handle Foundry events (chat messages, scene changes, etc.)
+    if (message.type === 'foundry-event') {
+      // Emit to event listeners
+      this.emit('foundry-event', message.data);
       return;
     }
 
