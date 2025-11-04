@@ -6,6 +6,10 @@ import * as path from 'path';
 
 import * as net from 'net';
 
+import * as http from 'http';
+
+import { WebSocketServer as ExternalWSS, WebSocket as ExternalWS } from 'ws';
+
 import { spawn, ChildProcess } from 'child_process';
 
 import { config } from './config.js';
@@ -1324,6 +1328,105 @@ async function startBackend(): Promise<void> {
       });
     }
   });
+
+  // ============================================================================
+  // External WebSocket Server for Chat Event Broadcasting (GameMasterAgent)
+  // ============================================================================
+
+  // Create dedicated HTTP server for external event broadcasting
+  const externalEventServer = http.createServer();
+  const externalEventWss = new ExternalWSS({ server: externalEventServer });
+  const externalEventClients = new Set<ExternalWS>();
+
+  // Track connected external clients
+  externalEventWss.on('connection', (ws: ExternalWS) => {
+    logger.info('External event client connected (GameMasterAgent)');
+    externalEventClients.add(ws);
+
+    // Clean up on disconnect
+    ws.on('close', () => {
+      externalEventClients.delete(ws);
+      logger.info('External event client disconnected', {
+        remainingClients: externalEventClients.size
+      });
+    });
+
+    ws.on('error', (error) => {
+      externalEventClients.delete(ws);
+      logger.warn('External event client error', { error: error.message });
+    });
+
+    // Send connection acknowledgment
+    ws.send(JSON.stringify({
+      type: 'connection-established',
+      timestamp: Date.now(),
+      message: 'Connected to Foundry MCP chat event stream'
+    }));
+  });
+
+  // Start external WebSocket server on port 3001
+  const EXTERNAL_EVENT_PORT = 3001;
+  externalEventServer.listen(EXTERNAL_EVENT_PORT, () => {
+    logger.info('External event WebSocket server listening', {
+      port: EXTERNAL_EVENT_PORT,
+      purpose: 'Broadcasting Foundry chat events to GameMasterAgent'
+    });
+  });
+
+  // Subscribe to foundry-event and broadcast to external clients
+  foundryClient.on('foundry-event', (eventData: any) => {
+    // Only broadcast chat message events to external clients
+    if (eventData.type === 'chat-message-created') {
+      const payload = JSON.stringify({
+        type: 'foundry-event',
+        data: eventData
+      });
+
+      // Broadcast to all connected external clients
+      let successCount = 0;
+      let failCount = 0;
+
+      externalEventClients.forEach(client => {
+        if (client.readyState === ExternalWS.OPEN) {
+          try {
+            client.send(payload);
+            successCount++;
+          } catch (error: any) {
+            failCount++;
+            logger.warn('Failed to send to external client', {
+              error: error.message
+            });
+          }
+        }
+      });
+
+      if (successCount > 0) {
+        logger.debug('Broadcasted chat event to external clients', {
+          speaker: eventData.data?.speaker,
+          successCount,
+          failCount,
+          totalClients: externalEventClients.size
+        });
+      }
+    }
+  });
+
+  // Cleanup on shutdown
+  process.on('SIGTERM', () => {
+    logger.info('Shutting down external event server');
+    externalEventClients.forEach(client => client.close());
+    externalEventServer.close();
+  });
+
+  process.on('SIGINT', () => {
+    logger.info('Shutting down external event server');
+    externalEventClients.forEach(client => client.close());
+    externalEventServer.close();
+  });
+
+  // ============================================================================
+  // End of External WebSocket Server
+  // ============================================================================
 
   // Start Foundry connector (owns app port 31415)
 
