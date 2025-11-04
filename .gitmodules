@@ -1,0 +1,3 @@
+[submodule "McpServer"]
+	path = McpServer
+	url = https://github.com/jonlewis214/foundry-vtt-mcp.git

@@ -6,7 +6,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema, ListResourcesRequestSchema, ReadResourceRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import { config } from './config.js';
 
@@ -400,7 +400,18 @@ async function startWrapper() {
     try { (backend as any).log?.('startWrapper(): pre-connection failed, will retry on demand', { error: (e as any)?.message }); } catch {}
   }
 
-  const mcp = new Server({ name: config.server.name, version: config.server.version }, { capabilities: { tools: {} } });
+  const mcp = new Server(
+    { name: config.server.name, version: config.server.version },
+    {
+      capabilities: {
+        tools: {},
+        resources: {
+          subscribe: false,
+          listChanged: false
+        }
+      }
+    }
+  );
 
 
 
@@ -477,6 +488,50 @@ async function startWrapper() {
     } catch (e: any) {
 
       return { content: [{ type: 'text', text: `Error: ${e?.message || 'Backend unavailable'}` }], isError: true } as any;
+
+    }
+
+  });
+
+
+
+  mcp.setRequestHandler(ListResourcesRequestSchema, async () => {
+
+    try {
+
+      const res = await backend.send('list_resources', {});
+
+      try { (backend as any).log?.('ListResources handler: received from backend', { hasResources: !!res.resources, resourceCount: res.resources?.length || 0 }); } catch {}
+
+      return { resources: res.resources || [] };
+
+    } catch (e) {
+
+      // Log but return empty to remain MCP-compliant
+
+      try { (backend as any).log?.('ListResources failed; returning empty', { error: (e as any)?.message }); } catch {}
+
+      return { resources: [] };
+
+    }
+
+  });
+
+
+
+  mcp.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+
+    const { uri } = request.params as any;
+
+    try {
+
+      const res = await backend.send('read_resource', { uri });
+
+      return res;
+
+    } catch (e: any) {
+
+      return { contents: [{ uri, mimeType: 'text/plain', text: `Error: ${e?.message || 'Backend unavailable'}` }] } as any;
 
     }
 

@@ -101,4 +101,25 @@ export class FoundryClient {
   isConnected(): boolean {
     return this.connector.isConnected();
   }
+
+  /**
+   * Subscribe to Foundry events (chat messages, etc.)
+   */
+  on(event: string, listener: (...args: any[]) => void): void {
+    this.connector.on(event, listener);
+  }
+
+  /**
+   * Unsubscribe from Foundry events
+   */
+  off(event: string, listener: (...args: any[]) => void): void {
+    this.connector.off(event, listener);
+  }
+
+  /**
+   * Subscribe to event once
+   */
+  once(event: string, listener: (...args: any[]) => void): void {
+    this.connector.once(event, listener);
+  }
 }

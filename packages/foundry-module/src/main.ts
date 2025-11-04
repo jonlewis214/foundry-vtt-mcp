@@ -92,10 +92,7 @@ class FoundryMCPBridge {
         await this.start();
       }
 
-      // Setup chat event bridge for real-time notifications
-      if (enabled && this.queryHandlers && this.queryHandlers.dataAccess && this.socketBridge) {
-        this.queryHandlers.dataAccess.setupChatEventBridge(this.socketBridge);
-      }
+      // Chat event bridge is now set up inside start() after socketBridge is created
 
       // Auto-build enhanced creature index if enabled and not exists
       await this.checkAndBuildEnhancedIndex();
@@ -197,9 +194,14 @@ class FoundryMCPBridge {
       // Update settings display with connection status
       this.settings.updateConnectionStatusDisplay(true, 17); // 17 MCP tools
       
+      // Setup chat event bridge for real-time notifications
+      if (this.queryHandlers && this.queryHandlers.dataAccess) {
+        this.queryHandlers.dataAccess.setupChatEventBridge(this.socketBridge);
+      }
+
       // Start heartbeat monitoring if enabled
       this.startHeartbeat();
-      
+
       // Show connection notification based on user preference
       if (this.settings.getSetting('enableNotifications')) {
         ui.notifications.info('🔗 MCP Bridge connected successfully');
