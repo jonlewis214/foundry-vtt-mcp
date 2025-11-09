@@ -4399,13 +4399,15 @@ export class FoundryDataAccess {
    */
   setupChatEventBridge(socketBridge: any): void {
     if (!game.user?.isGM) {
-      // Only GM users emit chat events (security)
+      // Only GM users can set up chat event bridge (security)
       return;
     }
 
     Hooks.on('createChatMessage', (message: any) => {
       try {
-        // Only emit for GM users (security)
+        // Only emit if current user is GM (security boundary)
+        // Note: This checks who is EMITTING events, not which messages to emit
+        // GM users see ALL chat messages (from all users)
         if (!game.user?.isGM) {
           return;
         }
