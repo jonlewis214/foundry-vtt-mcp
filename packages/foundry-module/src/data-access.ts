@@ -4309,15 +4309,56 @@ export class FoundryDataAccess {
         .sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))
         .slice(0, limit);
 
-      // Format for Claude
-      const formattedMessages = messages.map((msg: any) => ({
-        id: msg.id,
-        speaker: msg.speaker?.alias || msg.speaker?.actor || 'Unknown',
-        content: msg.content,
-        timestamp: new Date(msg.timestamp || 0).toISOString(),
-        isWhisper: (msg.whisper && msg.whisper.length > 0) || false,
-        flavor: msg.flavor || undefined
-      }));
+      // Format messages with complete data structure (same as chat events)
+      const formattedMessages = messages.map((msg: any) => {
+        // Handle user field which can be either an ID string or a User object
+        let userData = {
+          id: null as string | null,
+          name: null as string | null,
+          isGM: false
+        };
+
+        if (typeof msg.user === 'string') {
+          // User is just an ID, try to resolve it
+          const userObj = game.users?.get(msg.user);
+          if (userObj) {
+            userData = {
+              id: userObj.id,
+              name: userObj.name || null,
+              isGM: userObj.isGM || false
+            };
+          } else {
+            userData.id = msg.user;
+          }
+        } else if (msg.user && typeof msg.user === 'object') {
+          // User is already an object
+          userData = {
+            id: msg.user.id || null,
+            name: msg.user.name || null,
+            isGM: msg.user.isGM || false
+          };
+        }
+
+        return {
+          id: msg.id,
+          type: msg.type,
+          user: userData,
+          timestamp: new Date(msg.timestamp || 0).toISOString(),
+          flavor: msg.flavor || undefined,
+          content: msg.content,
+          speaker: {
+            scene: msg.speaker?.scene || null,
+            actor: msg.speaker?.actor || null,
+            token: msg.speaker?.token || null,
+            alias: msg.speaker?.alias || null
+          },
+          whisper: msg.whisper || [],
+          blind: msg.blind || false,
+          roll: msg.roll || null,
+          emote: msg.emote || false,
+          flags: msg.flags || {}
+        };
+      });
 
       return {
         success: true,
@@ -4374,14 +4415,53 @@ export class FoundryDataAccess {
           return;
         }
 
-        // Extract relevant message data
+        // Extract complete message data - let GMA decide what to use
+        // Handle user field which can be either an ID string or a User object
+        let userData = {
+          id: null as string | null,
+          name: null as string | null,
+          isGM: false
+        };
+
+        if (typeof message.user === 'string') {
+          // User is just an ID, try to resolve it
+          const userObj = game.users?.get(message.user);
+          if (userObj) {
+            userData = {
+              id: userObj.id,
+              name: userObj.name || null,
+              isGM: userObj.isGM || false
+            };
+          } else {
+            userData.id = message.user;
+          }
+        } else if (message.user && typeof message.user === 'object') {
+          // User is already an object
+          userData = {
+            id: message.user.id || null,
+            name: message.user.name || null,
+            isGM: message.user.isGM || false
+          };
+        }
+
         const messageData = {
           id: message.id,
-          speaker: message.speaker?.alias || message.speaker?.actor || 'Unknown',
-          content: message.content,
+          type: message.type,
+          user: userData,
           timestamp: message.timestamp || Date.now(),
-          isWhisper: (message.whisper && message.whisper.length > 0) || false,
-          flavor: message.flavor || undefined
+          flavor: message.flavor || undefined,
+          content: message.content,
+          speaker: {
+            scene: message.speaker?.scene || null,
+            actor: message.speaker?.actor || null,
+            token: message.speaker?.token || null,
+            alias: message.speaker?.alias || null
+          },
+          whisper: message.whisper || [],
+          blind: message.blind || false,
+          roll: message.roll || null,
+          emote: message.emote || false,
+          flags: message.flags || {}
         };
 
         // Emit to MCP server via socket bridge
